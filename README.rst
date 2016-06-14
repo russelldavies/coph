@@ -14,15 +14,23 @@ The the Makefile to either get a static or dyanmic binary:
 
 .. code-block:: bash
 
-    $ make
-    $ ./coph
+    $ make static
+    OR
+    $ make dynamic
 
 
-Running
--------
+Usage
+-----
 
-Run with the help flag:
+Run with the help flag to see a list of options:
 
 .. code-block:: bash
 
     $ ./coph --help
+    $ ./coph --username admin --password password
+
+Then send it a HTTP POST request with the printer name and print data payload:
+
+.. code-block:: bash
+
+    $ curl -X POST localhost:8080 --form printer_name=Printer --form data=@payload.dat
