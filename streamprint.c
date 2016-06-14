@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <cups/cups.h>
 
 char *cupsPassword;
@@ -6,8 +7,9 @@ char const *passwordCallback(char const *prompt) {
     return cupsPassword;
 }
 
-int streamPrint(char *server, char *username, char *password, char *printerName,
-                char *title, char *buffer, size_t bufferSize) {
+int streamPrint(char *server, char *username, char *password,
+                char *printerName, char *title, char *buffer,
+                size_t bufferSize) {
     cupsSetServer(server);
     cupsSetUser(username);
     cupsPassword = password;
@@ -19,6 +21,9 @@ int streamPrint(char *server, char *username, char *password, char *printerName,
         return -1;
     }
     cups_dest_t *dest = cupsGetDest(printerName, NULL, numDests, dests);
+    if (dest == NULL) {
+        return -1;
+    }
 
     if (title == NULL) {
         title = "title";
@@ -29,7 +34,7 @@ int streamPrint(char *server, char *username, char *password, char *printerName,
         char const *errorMsg = cupsLastErrorString();
         return -1;
     }
-    cupsStartDocument(CUPS_HTTP_DEFAULT, dest->name, jobId, title, CUPS_FORMAT_AUTO, 1);
+    cupsStartDocument(CUPS_HTTP_DEFAULT, dest->name, jobId, title, CUPS_FORMAT_RAW, 1);
     cupsWriteRequestData(CUPS_HTTP_DEFAULT, buffer, bufferSize);
     cupsFinishDocument(CUPS_HTTP_DEFAULT, dest->name);
     cupsFreeDests(numDests, dests);
