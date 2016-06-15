@@ -1,0 +1,8 @@
+[Unit]
+Description=CUPS HTTP printing service
+
+[Service]
+ExecStart=/opt/coph --server localhost --username cupsuser --password password
+
+[Install]
+WantedBy=multi-user.target
