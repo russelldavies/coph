@@ -33,4 +33,4 @@ Then send it a HTTP POST request with the printer name and print data payload:
 
 .. code-block:: bash
 
-    $ curl -X POST localhost:8080 --form printer_name=Printer --form data=@payload.dat
+    $ curl -X POST localhost:8080 --form printer_name=Printer --form file=@file.txt

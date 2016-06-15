@@ -87,11 +87,11 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		errorMsg = "No printer name specified"
 		http.Error(w, "'printer_name' form key must be specified", statusCode)
 	}
-	file, _, err := r.FormFile("data")
+	file, _, err := r.FormFile("file")
 	if err != nil {
 		statusCode = http.StatusBadRequest
 		errorMsg = err.Error()
-		http.Error(w, "'data' form key must be specified", statusCode)
+		http.Error(w, "'file' form key must be specified", statusCode)
 	} else {
 		defer file.Close()
 	}
