@@ -13,11 +13,19 @@ import "C"
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 	"unsafe"
@@ -26,11 +34,12 @@ import (
 var (
 	username     = flag.String("username", "", "coph username")
 	password     = flag.String("password", "", "coph password")
-	port         = flag.Int("port", 6631, "Port that coph listens on")
+	port         = flag.Int("port", 6310, "Port that coph listens on")
 	addr         string
 	cupsServer   = flag.String("cups-server", "localhost", "CUPS server to connect to")
 	cupsUsername = flag.String("cups-username", "", "CUPS username")
 	cupsPassword = flag.String("cups-password", "", "CUPS password")
+	hostname     = "coph"
 )
 
 type logWriter struct {
@@ -43,8 +52,8 @@ func (writer logWriter) Write(bytes []byte) (int, error) {
 func main() {
 	log.SetFlags(0)
 	log.SetOutput(new(logWriter))
-	flag.Parse()
 
+	flag.Parse()
 	switch {
 	case len(*username) == 0:
 		log.Fatalf("Missing required --username parameter")
@@ -55,12 +64,55 @@ func main() {
 	case len(*cupsPassword) == 0:
 		log.Fatalf("Missing required --cups-password parameter")
 	}
-	addr = ":" + strconv.Itoa(*port)
 
+	addr = ":" + strconv.Itoa(*port)
+	hostname, _ = os.Hostname()
+
+	s := &http.Server{
+		Addr:      addr,
+		TLSConfig: &tls.Config{Certificates: []tls.Certificate{*generateCert()}},
+	}
 	http.HandleFunc("/", httpHandler)
-	log.Printf("Starting server on %s", addr)
+
+	log.Printf("Starting server %s on %s", hostname, addr)
 	log.Printf("CUPS server is %s", *cupsServer)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	// Empty paths can be passed in as function will use Server.TLSConfig
+	log.Fatal(s.ListenAndServeTLS("", ""))
+}
+
+func generateCert() *tls.Certificate {
+	log.Print("Generating TLS certificate")
+
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		log.Fatalf("Failed to generate private key: %s", err)
+	}
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		log.Fatalf("failed to generate serial number: %s", err)
+	}
+
+	template := x509.Certificate{
+		SerialNumber:          serialNumber,
+		Subject:               pkix.Name{CommonName: hostname},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(20 * 365 * 24 * time.Hour), // 20 years
+		KeyUsage:              x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		DNSNames:              []string{hostname},
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		log.Fatalf("Failed to create certificate: %s", err)
+	}
+
+	return &tls.Certificate{
+		Certificate: [][]byte{derBytes},
+		PrivateKey:  priv,
+	}
 }
 
 func httpHandler(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +121,6 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	authUsername, authPassword, authOK := r.BasicAuth()
-	log.Printf("%b", authOK)
 	switch {
 	case !authOK:
 		http.Error(w, "Basic auth must be supplied", http.StatusUnauthorized)
