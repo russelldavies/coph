@@ -1,5 +1,4 @@
-#include <stdio.h>
-#include <cups/cups.h>
+#include "cups/cups.h"
 
 char *cupsPassword;
 
