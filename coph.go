@@ -98,7 +98,7 @@ func generateCert() *tls.Certificate {
 		Subject:               pkix.Name{CommonName: hostname},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(20 * 365 * 24 * time.Hour), // 20 years
-		KeyUsage:              x509.KeyUsageKeyEncipherment,
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		DNSNames:              []string{hostname},
