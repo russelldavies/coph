@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/big"
 	"net/http"
@@ -40,21 +41,17 @@ var (
 	cupsUsername = flag.String("cups-username", "", "CUPS username")
 	cupsPassword = flag.String("cups-password", "", "CUPS password")
 	hostname     = "coph"
+	silent       = flag.Bool("s", false, "silent; do not output anything")
+	noTimestamp  = flag.Bool("n", false, "no timestamp; do not include timestamp in log messages")
 )
 
-type logWriter struct {
-}
-
-func (writer logWriter) Write(bytes []byte) (int, error) {
-	return fmt.Print(time.Now().UTC().Format(time.RFC3339) + " " + string(bytes))
-}
-
 func main() {
-	log.SetFlags(0)
-	log.SetOutput(new(logWriter))
-
 	flag.Parse()
 	switch {
+	case *silent:
+		log.SetOutput(ioutil.Discard)
+	case *noTimestamp:
+		log.SetFlags(0)
 	case len(*username) == 0:
 		log.Fatalf("Missing required --username parameter")
 	case len(*password) == 0:
