@@ -127,29 +127,30 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	statusCode := http.StatusOK
-	var errorMsg string
+	statusMsg := "Printed OK"
 
 	printerName := r.FormValue("printer_name")
 	if len(printerName) == 0 {
 		statusCode = http.StatusBadRequest
-		errorMsg = "No printer name specified"
+		statusMsg = "No printer name specified"
 		http.Error(w, "'printer_name' form key must be specified", statusCode)
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
 		statusCode = http.StatusBadRequest
-		errorMsg = err.Error()
+		statusMsg = err.Error()
 		http.Error(w, "'file' form key must be specified", statusCode)
 	} else {
 		defer file.Close()
 	}
 
+	var size int64
 	if statusCode == http.StatusOK {
 		buffer := new(bytes.Buffer)
 		size, err := io.Copy(buffer, file)
 		if err != nil {
 			statusCode = http.StatusBadRequest
-			errorMsg = err.Error()
+			statusMsg = err.Error()
 			http.Error(w, "Bad data", statusCode)
 		} else {
 			jobId := print(printerName, buffer, size)
@@ -157,13 +158,13 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "%d", jobId)
 			} else {
 				statusCode = http.StatusBadRequest
-				errorMsg = "Failed to print"
-				http.Error(w, errorMsg, statusCode)
+				statusMsg = "Failed to print"
+				http.Error(w, statusMsg, statusCode)
 			}
 		}
 	}
-	log.Printf("%s %d: %s; %d; %s", r.Proto, statusCode, r.RemoteAddr,
-		r.ContentLength, errorMsg)
+	log.Printf("%s - %s %d - %s printer, %d bytes; %s", r.RemoteAddr, r.Proto,
+		statusCode, printerName, size, statusMsg)
 }
 
 func print(printerName string, buffer *bytes.Buffer, size int64) int {
