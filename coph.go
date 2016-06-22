@@ -41,8 +41,8 @@ var (
 	cupsUsername = flag.String("cups-username", "", "CUPS username")
 	cupsPassword = flag.String("cups-password", "", "CUPS password")
 	hostname     = "coph"
-	silent       = flag.Bool("s", false, "silent; do not output anything")
-	noTimestamp  = flag.Bool("n", false, "no timestamp; do not include timestamp in log messages")
+	silent       = flag.Bool("s", false, "Silent; do not output anything")
+	showTimestamp  = flag.Bool("t", false, "Show timestamp; include timestamp in log messages")
 )
 
 func main() {
@@ -50,7 +50,7 @@ func main() {
 	switch {
 	case *silent:
 		log.SetOutput(ioutil.Discard)
-	case *noTimestamp:
+	case *showTimestamp == false:
 		log.SetFlags(0)
 	case len(*username) == 0:
 		log.Fatalf("Missing required --username parameter")
