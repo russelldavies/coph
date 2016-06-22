@@ -126,18 +126,16 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid auth", http.StatusUnauthorized)
 		return
 	}
-	statusCode := http.StatusOK
-	statusMsg := "Printed OK"
+	var statusMsg string
+	statusCode := http.StatusBadRequest
 
 	printerName := r.FormValue("printer_name")
 	if len(printerName) == 0 {
-		statusCode = http.StatusBadRequest
 		statusMsg = "No printer name specified"
 		http.Error(w, "'printer_name' form key must be specified", statusCode)
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		statusCode = http.StatusBadRequest
 		statusMsg = err.Error()
 		http.Error(w, "'file' form key must be specified", statusCode)
 	} else {
@@ -145,19 +143,20 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var size int64
-	if statusCode == http.StatusOK {
+	if err == nil {
 		buffer := new(bytes.Buffer)
-		size, err := io.Copy(buffer, file)
+        var err error
+		size, err = io.Copy(buffer, file)
 		if err != nil {
-			statusCode = http.StatusBadRequest
 			statusMsg = err.Error()
 			http.Error(w, "Bad data", statusCode)
 		} else {
 			jobId := print(printerName, buffer, size)
 			if jobId > 0 {
 				fmt.Fprintf(w, "%d", jobId)
+                statusMsg = fmt.Sprintf("Printed OK, job id %d", jobId)
+                statusCode = http.StatusOK
 			} else {
-				statusCode = http.StatusBadRequest
 				statusMsg = "Failed to print"
 				http.Error(w, statusMsg, statusCode)
 			}
