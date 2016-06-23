@@ -2,7 +2,7 @@
 Description=CUPS HTTP printing service
 
 [Service]
-ExecStart=/opt/coph --server localhost --username cupsuser --password password
+ExecStart=/opt/coph --username cupsuser --password password --cups-server localhost --cups-username cups --cups-password password
 
 [Install]
 WantedBy=multi-user.target
