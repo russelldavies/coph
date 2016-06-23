@@ -33,25 +33,27 @@ import (
 )
 
 var (
-	username     = flag.String("username", "", "coph username")
-	password     = flag.String("password", "", "coph password")
-	port         = flag.Int("port", 6310, "Port that coph listens on")
-	addr         string
-	cupsServer   = flag.String("cups-server", "localhost", "CUPS server to connect to")
-	cupsUsername = flag.String("cups-username", "", "CUPS username")
-	cupsPassword = flag.String("cups-password", "", "CUPS password")
-	hostname     = "coph"
-	silent       = flag.Bool("s", false, "Silent; do not output anything")
-	showTimestamp  = flag.Bool("t", false, "Show timestamp; include timestamp in log messages")
+	username      = flag.String("username", "", "coph username")
+	password      = flag.String("password", "", "coph password")
+	port          = flag.Int("port", 6310, "Port that coph listens on")
+	addr          string
+	cupsServer    = flag.String("cups-server", "localhost", "CUPS server to connect to")
+	cupsUsername  = flag.String("cups-username", "", "CUPS username")
+	cupsPassword  = flag.String("cups-password", "", "CUPS password")
+	hostname      = "coph"
+	silent        = flag.Bool("s", false, "Silent; do not output anything")
+	showTimestamp = flag.Bool("t", false, "Show timestamp; include timestamp in log messages")
 )
 
 func main() {
 	flag.Parse()
-	switch {
-	case *silent:
+	if *silent {
 		log.SetOutput(ioutil.Discard)
-	case *showTimestamp == false:
+	}
+	if !*showTimestamp {
 		log.SetFlags(0)
+	}
+	switch {
 	case len(*username) == 0:
 		log.Fatalf("Missing required --username parameter")
 	case len(*password) == 0:
@@ -145,7 +147,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 	var size int64
 	if err == nil {
 		buffer := new(bytes.Buffer)
-        var err error
+		var err error
 		size, err = io.Copy(buffer, file)
 		if err != nil {
 			statusMsg = err.Error()
@@ -154,8 +156,8 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 			jobId := print(printerName, buffer, size)
 			if jobId > 0 {
 				fmt.Fprintf(w, "%d", jobId)
-                statusMsg = fmt.Sprintf("Printed OK, job id %d", jobId)
-                statusCode = http.StatusOK
+				statusMsg = fmt.Sprintf("Printed OK, job id %d", jobId)
+				statusCode = http.StatusOK
 			} else {
 				statusMsg = "Failed to print"
 				http.Error(w, statusMsg, statusCode)
