@@ -8,16 +8,38 @@ Inspired by the `12 Factor <http://12factor.net>`_ approach of treating
 backing services as attached resources, the printer becomes a URL and printing
 always works, without mechanical failures *coph, coph*.
 
-Installation
-------------
+Building
+--------
 
-The the Makefile to either get a static or dyanmic binary:
+Because cgo is compiling CUPS libraries into the go executable you'll need
+the CUPS header files and libraries. They might already be on your machine in
+which case the following should suffice:
 
 .. code-block:: bash
 
     $ make static
     OR
     $ make dynamic
+
+However, this will most likely fail, especially for building a static
+executable as cgo has problems including glibc. So unless your system is
+running musl, you'll want to build using Docker. There is an included
+Dockerfile which creates a musl based container and then builds the executable.
+To use it, run the build script which will take care of creating the Docker
+image and running the build process:
+
+.. code-block:: bash
+
+    $ ./build.sh
+    OR
+    $ ./build.sh dynamic
+
+On some architectures like ARM, you can also just install musl and make use of
+the compiler wrapper:
+
+.. code-block:: bash
+
+    $ CC=/usr/bin/musl-gcc go build --ldflags '-s -linkmode external -extldflags "-static"' coph.go
 
 
 Usage
