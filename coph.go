@@ -117,10 +117,12 @@ func main() {
 		Addr:      addr,
 		TLSConfig: &tls.Config{Certificates: []tls.Certificate{*generateCert()}},
 	}
-	http.HandleFunc("/", httpHandler)
+	http.HandleFunc("/", printHandler)
+	http.HandleFunc("/stats", statsHandler)
 
 	log.Printf("Starting server %s on %s", hostname, addr)
 	log.Printf("CUPS server is %s", *cupsServer)
+	log.Println("Listening...")
 	// Empty paths can be passed in as function will use Server.TLSConfig
 	log.Fatal(s.ListenAndServeTLS("", ""))
 }
@@ -160,19 +162,6 @@ func generateCert() *tls.Certificate {
 	}
 }
 
-func httpHandler(res http.ResponseWriter, req *http.Request) {
-	switch req.Method {
-	case http.MethodGet:
-		showStats(res, req)
-	case http.MethodPost:
-		printJob(res, req)
-	case http.MethodOptions:
-		res.Header().Set("Allow", "OPTIONS, GET, POST")
-	default:
-		http.Error(res, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-	}
-}
-
 func authenticate(res http.ResponseWriter, req *http.Request) bool {
 	authUsername, authPassword, authOK := req.BasicAuth()
 	switch {
@@ -184,6 +173,34 @@ func authenticate(res http.ResponseWriter, req *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+func updateStats() {
+	for prefix, duration := range statsDurations {
+		count := prefix + "Count"
+		start := prefix + "Start"
+
+		if time.Now().Sub(time.Unix(stats[start], 0)) <= duration {
+			stats[count] += 1
+		} else {
+			stats[count] = 1
+			stats[start] = time.Now().Unix()
+		}
+	}
+	stats["total"] += 1
+}
+
+func printHandler(res http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodGet:
+		fmt.Fprintf(res, "coph\n")
+	case http.MethodPost:
+		printJob(res, req)
+	case http.MethodOptions:
+		res.Header().Set("Allow", "OPTIONS, GET, POST")
+	default:
+		http.Error(res, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+	}
 }
 
 func printJob(res http.ResponseWriter, req *http.Request) {
@@ -238,7 +255,7 @@ func printJob(res http.ResponseWriter, req *http.Request) {
 		statusCode, printerName, size, statusMsg)
 }
 
-func showStats(res http.ResponseWriter, req *http.Request) {
+func statsHandler(res http.ResponseWriter, req *http.Request) {
 	if !authenticate(res, req) {
 		return
 	}
@@ -249,19 +266,4 @@ func showStats(res http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(res, "* Week: %d\n", stats["weekCount"])
 	fmt.Fprintf(res, "* Month: %d\n", stats["monthCount"])
 	fmt.Fprintf(res, "* Total (since started): %d\n", stats["total"])
-}
-
-func updateStats() {
-	for prefix, duration := range statsDurations {
-		count := prefix + "Count"
-		start := prefix + "Start"
-
-		if time.Now().Sub(time.Unix(stats[start], 0)) <= duration {
-			stats[count] += 1
-		} else {
-			stats[count] = 1
-			stats[start] = time.Now().Unix()
-		}
-	}
-	stats["total"] += 1
 }
