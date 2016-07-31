@@ -67,4 +67,8 @@ Then send it a HTTP POST request with the printer name and print data payload:
 Note that coph uses TLS so your client must connect using the 'https' scheme.
 Every time coph starts, it generates a self-signed certificate.
 
-If you make an authenticated GET request, you'll see printing stats.
+If you make an authenticated GET request to */stats*, you'll see stats relating
+to the number of print jobs submitted.
+
+An unauthenticated GET request to the root path, */*, is permissible and just
+returns *coph*. Its main use is for health check polling.
