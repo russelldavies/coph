@@ -62,7 +62,9 @@ Then send it a HTTP POST request with the printer name and print data payload:
 
 .. code-block:: bash
 
-    $ curl --insecure -X POST https://localhost:6310 --form printer_name=Printer --form file=@file.txt
+    $ curl --insecure -X POST https://foo:bar@localhost:6310 --form printer_name=Printer --form file=@file.txt
 
 Note that coph uses TLS so your client must connect using the 'https' scheme.
 Every time coph starts, it generates a self-signed certificate.
+
+If you make an authenticated GET request, you'll see printing stats.

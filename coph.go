@@ -83,6 +83,11 @@ var (
 	hostname      = "coph"
 	silent        = flag.Bool("s", false, "Silent; do not output anything")
 	showTimestamp = flag.Bool("t", false, "Show timestamp; include timestamp in log messages")
+
+	stats          map[string]int64 = make(map[string]int64)
+	statsDurations                  = map[string]time.Duration{"day": time.Hour * 24,
+		"week":  time.Hour * 24 * 7,
+		"month": time.Hour * 24 * 30}
 )
 
 func main() {
@@ -104,6 +109,7 @@ func main() {
 		log.Fatalf("Missing required --cups-password parameter")
 	}
 
+	stats["started"] = time.Now().Unix()
 	addr = ":" + strconv.Itoa(*port)
 	hostname, _ = os.Hostname()
 
@@ -154,32 +160,48 @@ func generateCert() *tls.Certificate {
 	}
 }
 
-func httpHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
+func httpHandler(res http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodGet:
+		showStats(res, req)
+	case http.MethodPost:
+		printJob(res, req)
+	case http.MethodOptions:
+		res.Header().Set("Allow", "OPTIONS, GET, POST")
+	default:
+		http.Error(res, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 	}
-	authUsername, authPassword, authOK := r.BasicAuth()
+}
+
+func authenticate(res http.ResponseWriter, req *http.Request) bool {
+	authUsername, authPassword, authOK := req.BasicAuth()
 	switch {
 	case !authOK:
-		http.Error(w, "Basic auth must be supplied", http.StatusUnauthorized)
-		return
+		http.Error(res, "Basic auth must be supplied", http.StatusUnauthorized)
+		return false
 	case authUsername != *username || authPassword != *password:
-		http.Error(w, "Invalid auth", http.StatusUnauthorized)
+		http.Error(res, "Invalid auth", http.StatusUnauthorized)
+		return false
+	}
+	return true
+}
+
+func printJob(res http.ResponseWriter, req *http.Request) {
+	if !authenticate(res, req) {
 		return
 	}
 	var statusMsg string
 	statusCode := http.StatusBadRequest
 
-	printerName := r.FormValue("printer_name")
+	printerName := req.FormValue("printer_name")
 	if len(printerName) == 0 {
 		statusMsg = "No printer name specified"
-		http.Error(w, "'printer_name' form key must be specified", statusCode)
+		http.Error(res, "'printer_name' form key must be specified", statusCode)
 	}
-	file, _, err := r.FormFile("file")
+	file, _, err := req.FormFile("file")
 	if err != nil {
 		statusMsg = err.Error()
-		http.Error(w, "'file' form key must be specified", statusCode)
+		http.Error(res, "'file' form key must be specified", statusCode)
 	} else {
 		defer file.Close()
 	}
@@ -191,25 +213,55 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		size, err = io.Copy(buffer, file)
 		if err != nil {
 			statusMsg = err.Error()
-			http.Error(w, "Bad data", statusCode)
+			http.Error(res, "Bad data", statusCode)
 		} else {
-			jobId := print(printerName, buffer, size)
+			jobId := int(C.streamPrint(
+				C.CString(*cupsServer),
+				C.CString(*cupsUsername),
+				C.CString(*cupsPassword),
+				C.CString(printerName),
+				nil,
+				(*C.char)(unsafe.Pointer(&buffer.Bytes()[0])),
+				C.size_t(size)))
 			if jobId > 0 {
-				fmt.Fprintf(w, "%d", jobId)
+				fmt.Fprintf(res, "%d", jobId)
 				statusMsg = fmt.Sprintf("Printed OK, job id %d", jobId)
 				statusCode = http.StatusOK
+				updateStats()
 			} else {
 				statusMsg = "Failed to print"
-				http.Error(w, statusMsg, statusCode)
+				http.Error(res, statusMsg, statusCode)
 			}
 		}
 	}
-	log.Printf("%s - %s %d - %s printer, %d bytes; %s", r.RemoteAddr, r.Proto,
+	log.Printf("%s - %s %d - %s printer, %d bytes; %s", req.RemoteAddr, req.Proto,
 		statusCode, printerName, size, statusMsg)
 }
 
-func print(printerName string, buffer *bytes.Buffer, size int64) int {
-	return int(C.streamPrint(C.CString(*cupsServer), C.CString(*cupsUsername),
-		C.CString(*cupsPassword), C.CString(printerName), nil,
-		(*C.char)(unsafe.Pointer(&buffer.Bytes()[0])), C.size_t(size)))
+func showStats(res http.ResponseWriter, req *http.Request) {
+	if !authenticate(res, req) {
+		return
+	}
+	fmt.Fprintf(res, "coph\n~~~~\n")
+	fmt.Fprintf(res, "Started: %s\n", time.Unix(stats["started"], 0))
+	fmt.Fprintf(res, "Submitted print jobs, per:\n")
+	fmt.Fprintf(res, "* Day: %d\n", stats["dayCount"])
+	fmt.Fprintf(res, "* Week: %d\n", stats["weekCount"])
+	fmt.Fprintf(res, "* Month: %d\n", stats["monthCount"])
+	fmt.Fprintf(res, "* Total (since started): %d\n", stats["total"])
+}
+
+func updateStats() {
+	for prefix, duration := range statsDurations {
+		count := prefix + "Count"
+		start := prefix + "Start"
+
+		if time.Now().Sub(time.Unix(stats[start], 0)) <= duration {
+			stats[count] += 1
+		} else {
+			stats[count] = 1
+			stats[start] = time.Now().Unix()
+		}
+	}
+	stats["total"] += 1
 }
