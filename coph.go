@@ -163,13 +163,10 @@ func generateCert() *tls.Certificate {
 }
 
 func authenticate(res http.ResponseWriter, req *http.Request) bool {
-	authUsername, authPassword, authOK := req.BasicAuth()
-	switch {
-	case !authOK:
-		http.Error(res, "Basic auth must be supplied", http.StatusUnauthorized)
-		return false
-	case authUsername != *username || authPassword != *password:
-		http.Error(res, "Invalid auth", http.StatusUnauthorized)
+	authUsername, authPassword, _ := req.BasicAuth()
+	if authUsername != *username || authPassword != *password {
+		res.Header().Set("WWW-Authenticate", `Basic realm="coph"`)
+		http.Error(res, "Unauthorized: Authorization Required", http.StatusUnauthorized)
 		return false
 	}
 	return true
