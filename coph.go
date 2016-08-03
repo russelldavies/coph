@@ -85,9 +85,11 @@ var (
 	showTimestamp = flag.Bool("t", false, "Show timestamp; include timestamp in log messages")
 
 	stats          map[string]int64 = make(map[string]int64)
-	statsDurations                  = map[string]time.Duration{"day": time.Hour * 24,
+	statsDurations                  = map[string]time.Duration{
+		"day":   time.Hour * 24,
 		"week":  time.Hour * 24 * 7,
-		"month": time.Hour * 24 * 30}
+		"month": time.Hour * 24 * 30,
+	}
 )
 
 func main() {
@@ -185,6 +187,7 @@ func updateStats() {
 		}
 	}
 	stats["total"] += 1
+	stats["last"] = time.Now().Unix()
 }
 
 func printHandler(res http.ResponseWriter, req *http.Request) {
@@ -258,9 +261,12 @@ func statsHandler(res http.ResponseWriter, req *http.Request) {
 	}
 	fmt.Fprintf(res, "coph\n~~~~\n")
 	fmt.Fprintf(res, "Started: %s\n", time.Unix(stats["started"], 0))
+	if stats["total"] > 0 {
+		fmt.Fprintf(res, "Last print job: %s\n", time.Unix(stats["last"], 0))
+	}
 	fmt.Fprintf(res, "Submitted print jobs, per:\n")
-	fmt.Fprintf(res, "* Day: %d\n", stats["dayCount"])
-	fmt.Fprintf(res, "* Week: %d\n", stats["weekCount"])
-	fmt.Fprintf(res, "* Month: %d\n", stats["monthCount"])
-	fmt.Fprintf(res, "* Total (since started): %d\n", stats["total"])
+	fmt.Fprintf(res, " * Day: %d\n", stats["dayCount"])
+	fmt.Fprintf(res, " * Week: %d\n", stats["weekCount"])
+	fmt.Fprintf(res, " * Month: %d\n", stats["monthCount"])
+	fmt.Fprintf(res, " * Total (since started): %d\n", stats["total"])
 }
