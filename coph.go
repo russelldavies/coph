@@ -115,18 +115,44 @@ func main() {
 	addr = ":" + strconv.Itoa(*port)
 	hostname, _ = os.Hostname()
 
-	s := &http.Server{
-		Addr:      addr,
-		TLSConfig: &tls.Config{Certificates: []tls.Certificate{*generateCert()}},
+	mux := http.NewServeMux()
+	mux.HandleFunc("/stats/", statsHandler)
+	mux.HandleFunc("/", printHandler)
+
+	srv := &http.Server{
+		Addr:         addr,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second, // Go 1.8 only
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{*generateCert()},
+			// Causes servers to use Go's default ciphersuite preferences,
+			// which are tuned to avoid attacks. Does nothing on clients.
+			PreferServerCipherSuites: true,
+			// Only use curves which have assembly implementations
+			CurvePreferences: []tls.CurveID{
+				tls.CurveP256,
+				tls.X25519, // Go 1.8 only
+			},
+			MinVersion: tls.VersionTLS12,
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305, // Go 1.8 only
+				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,   // Go 1.8 only
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			},
+		},
+		Handler: mux,
 	}
-	http.HandleFunc("/", printHandler)
-	http.HandleFunc("/stats", statsHandler)
 
 	log.Printf("Starting server %s on %s", hostname, addr)
 	log.Printf("CUPS server is %s", *cupsServer)
 	log.Println("Listening...")
 	// Empty paths can be passed in as function will use Server.TLSConfig
-	log.Fatal(s.ListenAndServeTLS("", ""))
+	log.Fatal(srv.ListenAndServeTLS("", ""))
+
 }
 
 func generateCert() *tls.Certificate {
@@ -164,11 +190,11 @@ func generateCert() *tls.Certificate {
 	}
 }
 
-func authenticate(res http.ResponseWriter, req *http.Request) bool {
+func authenticate(w http.ResponseWriter, req *http.Request) bool {
 	authUsername, authPassword, _ := req.BasicAuth()
 	if authUsername != *username || authPassword != *password {
-		res.Header().Set("WWW-Authenticate", `Basic realm="coph"`)
-		http.Error(res, "Unauthorized: Authorization Required", http.StatusUnauthorized)
+		w.Header().Set("WWW-Authenticate", `Basic realm="coph"`)
+		http.Error(w, "Unauthorized: Authorization Required", http.StatusUnauthorized)
 		return false
 	}
 	return true
@@ -190,21 +216,21 @@ func updateStats() {
 	stats["last"] = time.Now().Unix()
 }
 
-func printHandler(res http.ResponseWriter, req *http.Request) {
+func printHandler(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case http.MethodGet:
-		fmt.Fprintf(res, "coph\n")
+		fmt.Fprintf(w, "coph\n")
 	case http.MethodPost:
-		printJob(res, req)
+		printJob(w, req)
 	case http.MethodOptions:
-		res.Header().Set("Allow", "OPTIONS, GET, POST")
+		w.Header().Set("Allow", "OPTIONS, GET, POST")
 	default:
-		http.Error(res, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 	}
 }
 
-func printJob(res http.ResponseWriter, req *http.Request) {
-	if !authenticate(res, req) {
+func printJob(w http.ResponseWriter, req *http.Request) {
+	if !authenticate(w, req) {
 		return
 	}
 	var statusMsg string
@@ -213,12 +239,12 @@ func printJob(res http.ResponseWriter, req *http.Request) {
 	printerName := req.FormValue("printer_name")
 	if len(printerName) == 0 {
 		statusMsg = "No printer name specified"
-		http.Error(res, "'printer_name' form key must be specified", statusCode)
+		http.Error(w, "'printer_name' form key must be specified", statusCode)
 	}
 	file, _, err := req.FormFile("file")
 	if err != nil {
 		statusMsg = err.Error()
-		http.Error(res, "'file' form key must be specified", statusCode)
+		http.Error(w, "'file' form key must be specified", statusCode)
 	} else {
 		defer file.Close()
 	}
@@ -230,7 +256,7 @@ func printJob(res http.ResponseWriter, req *http.Request) {
 		size, err = io.Copy(buffer, file)
 		if err != nil {
 			statusMsg = err.Error()
-			http.Error(res, "Bad data", statusCode)
+			http.Error(w, "Bad data", statusCode)
 		} else {
 			jobId := int(C.streamPrint(
 				C.CString(*cupsServer),
@@ -241,13 +267,13 @@ func printJob(res http.ResponseWriter, req *http.Request) {
 				(*C.char)(unsafe.Pointer(&buffer.Bytes()[0])),
 				C.size_t(size)))
 			if jobId > 0 {
-				fmt.Fprintf(res, "%d", jobId)
+				fmt.Fprintf(w, "%d", jobId)
 				statusMsg = fmt.Sprintf("Printed OK, job id %d", jobId)
 				statusCode = http.StatusOK
 				updateStats()
 			} else {
 				statusMsg = "Failed to print"
-				http.Error(res, statusMsg, statusCode)
+				http.Error(w, statusMsg, statusCode)
 			}
 		}
 	}
@@ -255,18 +281,18 @@ func printJob(res http.ResponseWriter, req *http.Request) {
 		statusCode, printerName, size, statusMsg)
 }
 
-func statsHandler(res http.ResponseWriter, req *http.Request) {
-	if !authenticate(res, req) {
+func statsHandler(w http.ResponseWriter, req *http.Request) {
+	if !authenticate(w, req) {
 		return
 	}
-	fmt.Fprintf(res, "coph\n~~~~\n")
-	fmt.Fprintf(res, "Started: %s\n", time.Unix(stats["started"], 0))
+	fmt.Fprintf(w, "coph\n~~~~\n")
+	fmt.Fprintf(w, "Started: %s\n", time.Unix(stats["started"], 0))
 	if stats["total"] > 0 {
-		fmt.Fprintf(res, "Last print job: %s\n", time.Unix(stats["last"], 0))
+		fmt.Fprintf(w, "Last print job: %s\n", time.Unix(stats["last"], 0))
 	}
-	fmt.Fprintf(res, "Submitted print jobs, per:\n")
-	fmt.Fprintf(res, " * Day: %d\n", stats["dayCount"])
-	fmt.Fprintf(res, " * Week: %d\n", stats["weekCount"])
-	fmt.Fprintf(res, " * Month: %d\n", stats["monthCount"])
-	fmt.Fprintf(res, " * Total (since started): %d\n", stats["total"])
+	fmt.Fprintf(w, "Submitted print jobs, in the last:\n")
+	fmt.Fprintf(w, " * Day: %d\n", stats["dayCount"])
+	fmt.Fprintf(w, " * Week: %d\n", stats["weekCount"])
+	fmt.Fprintf(w, " * Month: %d\n", stats["monthCount"])
+	fmt.Fprintf(w, " * Total (since started): %d\n", stats["total"])
 }
