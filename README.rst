@@ -1,6 +1,8 @@
 coph: CUPS Over Plain HTTP
 ==========================
 
+(Note: if your print data can be sent directly to your printer, raw mode, and you don't need CUPS then `posh <https://github.com/russelldavies/posh>`_ may be a better option.)
+
 coph is a small HTTP daemon that listens for requests and prints them via
 CUPS.
 
